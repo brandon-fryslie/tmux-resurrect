@@ -1,24 +1,12 @@
 #!/usr/bin/env bash
 
-CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-
-PANE_PID="$1"
-
-exit_safely_if_empty_ppid() {
-	if [ -z "$PANE_PID" ]; then
-		exit 0
-	fi
-}
+# Prints one line per pane pid given: the command line of the pane's child process,
+# or an empty line when it has none.
 
 full_command() {
-	ps -ao "ppid,args" |
-		sed "s/^ *//" |
-		grep "^${PANE_PID}" |
-		cut -d' ' -f2-
+	ps -ao "ppid=,args=" | awk -v pid="$1" '$1 == pid { sub(/^ *[0-9]+ /, ""); print; exit }'
 }
 
-main() {
-	exit_safely_if_empty_ppid
-	full_command
-}
-main
+for pane_pid in "$@"; do
+	echo "$(full_command "$pane_pid")"
+done

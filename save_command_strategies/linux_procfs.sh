@@ -1,26 +1,17 @@
 #!/usr/bin/env bash
 
-CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-
-PANE_PID="$1"
-COMMAND_PID=$(pgrep -P $PANE_PID)
-
-exit_safely_if_empty_ppid() {
-	if [ -z "$PANE_PID" ]; then
-		exit 0
-	fi
-}
+# Prints one line per pane pid given: the command line of the pane's child process,
+# or an empty line when it has none.
 
 full_command() {
-	[[ -z "$COMMAND_PID" ]] && exit 0
-    # See: https://unix.stackexchange.com/a/567021
-    # Avoid complications with system printf by using bash subshell interpolation.
-    # This will properly escape sequences and null in cmdline.
-    cat /proc/${COMMAND_PID}/cmdline | xargs -0 bash -c 'printf "%q " "$0" "$@"'
+	local command_pid="$(pgrep -P "$1" | head -n 1)"
+	[[ -z "$command_pid" ]] && return
+	# See: https://unix.stackexchange.com/a/567021
+	# Avoid complications with system printf by using bash subshell interpolation.
+	# This will properly escape sequences and null in cmdline.
+	cat /proc/${command_pid}/cmdline | xargs -0 bash -c 'printf "%q " "$0" "$@"'
 }
 
-main() {
-	exit_safely_if_empty_ppid
-	full_command
-}
-main
+for pane_pid in "$@"; do
+	echo "$(full_command "$pane_pid")"
+done

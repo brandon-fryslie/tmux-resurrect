@@ -206,14 +206,19 @@ Additionally a mosh-client strategy is provided to handle extracting the origina
 
 ### How a pane's command is recorded
 
-On save, a strategy is run once per pane with the pane's pid as its only argument,
-and what it prints is the command recorded for that pane: one line, which restore
-types into the pane. The bundled strategies (`ps`, the default, `pgrep`, `gdb`,
-`linux_procfs`) are chosen by name:
+On save, a strategy is run once with every pane's pid as its arguments. It prints one
+line per pid, in the same order: the command recorded for that pane, which restore
+types into the pane, or an empty line when the pane runs nothing to restore. The
+bundled strategies (`ps`, the default, `pgrep`, `gdb`, `linux_procfs`) are chosen by
+name:
 
     set -g @resurrect-save-command-strategy 'pgrep'
 
 A value containing a `/` is the path of your own executable strategy instead
-(`~` is expanded). It is used as given, with no fallback to the default:
+(`~` is expanded):
 
     set -g @resurrect-save-command-strategy '~/.config/tmux/my-strategy'
+
+If the strategy is missing, exits non-zero, or prints a different number of lines
+than there are panes, the save fails with a message and the last save stays the one
+restore reads.

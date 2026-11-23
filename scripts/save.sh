@@ -94,28 +94,33 @@ toggle_window_zoom() {
 	tmux resize-pane -Z -t "$target"
 }
 
+# The strategy executable: a bundled strategy's name, or a path (`~` expanded) to your own.
 _save_command_strategy_file() {
 	local save_command_strategy="$(get_tmux_option "$save_command_strategy_option" "$default_save_command_strategy")"
-	# A path names an executable outside the plugin; it is used as given, with no
-	# fallback, so a wrong path fails where it is run instead of saving ps output.
 	if [[ "$save_command_strategy" == */* ]]; then
 		echo "${save_command_strategy/#\~/$HOME}"
-		return
-	fi
-	local strategy_file="$CURRENT_DIR/../save_command_strategies/${save_command_strategy}.sh"
-	local default_strategy_file="$CURRENT_DIR/../save_command_strategies/${default_save_command_strategy}.sh"
-	if [ -e "$strategy_file" ]; then # strategy file exists?
-		echo "$strategy_file"
 	else
-		echo "$default_strategy_file"
+		echo "$CURRENT_DIR/../save_command_strategies/${save_command_strategy}.sh"
 	fi
 }
 
-pane_full_command() {
-	local pane_pid="$1"
+# Runs the strategy once with every pane pid; it prints one line per pid, in order: the
+# command recorded for that pane, empty when there is none. A strategy that fails or
+# prints another number of lines fails the save, because a missing command would be
+# saved looking exactly like a pane that runs nothing.
+pane_full_commands() {
 	local strategy_file="$(_save_command_strategy_file)"
-	# execute strategy script to get pane full command
-	$strategy_file "$pane_pid"
+	local commands_file="$1"
+	shift
+	if ! "$strategy_file" "$@" > "$commands_file"; then
+		echo "tmux-resurrect: save aborted: save-command strategy $strategy_file failed" >&2
+		return 1
+	fi
+	local lines="$(wc -l < "$commands_file" | tr -d ' ')"
+	if [ "$lines" -ne "$#" ]; then
+		echo "tmux-resurrect: save aborted: save-command strategy $strategy_file printed $lines lines for $# panes" >&2
+		return 1
+	fi
 }
 
 number_nonempty_lines_on_screen() {
@@ -193,17 +198,26 @@ fetch_and_dump_grouped_sessions(){
 
 # translates pane pid to process command running inside a pane
 dump_panes() {
-	local full_command
-	dump_panes_raw |
-		while IFS=$d read line_type session_name window_number window_active window_flags pane_index pane_title dir pane_active pane_command pane_pid history_size; do
-			# not saving panes from grouped sessions
-			if is_session_grouped "$session_name"; then
-				continue
-			fi
-			full_command="$(pane_full_command $pane_pid)"
-			dir=$(echo $dir | sed 's/ /\\ /') # escape all spaces in directory path
-			echo "${line_type}${d}${session_name}${d}${window_number}${d}${window_active}${d}${window_flags}${d}${pane_index}${d}${pane_title}${d}${dir}${d}${pane_active}${d}${pane_command}${d}:${full_command}"
-		done
+	local panes=() pane_pids=() line_type session_name window_number window_active window_flags pane_index pane_title dir pane_active pane_command pane_pid history_size
+	while IFS=$d read line_type session_name window_number window_active window_flags pane_index pane_title dir pane_active pane_command pane_pid history_size; do
+		# not saving panes from grouped sessions
+		if is_session_grouped "$session_name"; then
+			continue
+		fi
+		dir=$(echo $dir | sed 's/ /\\ /') # escape all spaces in directory path
+		panes+=("${line_type}${d}${session_name}${d}${window_number}${d}${window_active}${d}${window_flags}${d}${pane_index}${d}${pane_title}${d}${dir}${d}${pane_active}${d}${pane_command}")
+		pane_pids+=("$pane_pid")
+	done < <(dump_panes_raw)
+	local commands_file="$(mktemp)" full_command i=0
+	if ! pane_full_commands "$commands_file" "${pane_pids[@]}"; then
+		rm -f "$commands_file"
+		return 1
+	fi
+	while IFS= read -r full_command; do
+		echo "${panes[$i]}${d}:${full_command}"
+		i=$((i + 1))
+	done < "$commands_file"
+	rm -f "$commands_file"
 }
 
 dump_windows() {
@@ -246,7 +260,10 @@ save_all() {
 	local last_resurrect_file="$(last_resurrect_file)"
 	mkdir -p "$(resurrect_dir)"
 	fetch_and_dump_grouped_sessions > "$resurrect_file_path"
-	dump_panes   >> "$resurrect_file_path"
+	if ! dump_panes >> "$resurrect_file_path"; then
+		rm "$resurrect_file_path"
+		return 1
+	fi
 	dump_windows >> "$resurrect_file_path"
 	dump_state   >> "$resurrect_file_path"
 	execute_hook "post-save-layout" "$resurrect_file_path"
@@ -274,7 +291,14 @@ main() {
 		if show_output; then
 			start_spinner "Saving..." "Tmux environment saved!"
 		fi
-		save_all
+		# run-shell shows a script's stdout and drops its stderr, so a failure is reported on stdout.
+		if ! save_all 2>&1; then
+			if show_output; then
+				stop_spinner
+				display_message "Tmux save failed; the last save is unchanged"
+			fi
+			exit 1
+		fi
 		if show_output; then
 			stop_spinner
 			display_message "Tmux environment saved!"
