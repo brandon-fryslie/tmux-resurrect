@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 
-# Prints one line per pane pid given: the command line of the pane's child process,
-# or an empty line when it has none.
+# Prints one line per pane pid given: the command line of the process in the pane's
+# foreground, or an empty line when that is the pane's own shell.
 
 full_command() {
-	\pgrep -lf -P "$1" | head -n 1 | cut -d' ' -f2-
+	local leader="$(ps -o tpgid= -p "$1" | tr -d ' ')"
+	[[ -z "$leader" || "$leader" == "$1" ]] && return
+	\pgrep -lf -g "$leader" | awk -v leader="$leader" '$1 == leader { sub(/^[0-9]+ /, ""); print; exit }'
 }
 
 for pane_pid in "$@"; do

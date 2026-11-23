@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 
-# Prints one line per pane pid given: the command line of the pane's child process,
-# or an empty line when it has none.
+# Prints one line per pane pid given: the command line of the process in the pane's
+# foreground, or an empty line when that is the pane's own shell.
 
-full_command() {
-	ps -ao "ppid=,args=" | awk -v pid="$1" '$1 == pid { sub(/^ *[0-9]+ /, ""); print; exit }'
-}
-
-for pane_pid in "$@"; do
-	echo "$(full_command "$pane_pid")"
-done
+ps -axo "pid=,tpgid=,args=" | awk -v panes="$*" '
+	{ pid = $1; foreground[pid] = $2; sub(/^ *[0-9]+ +-?[0-9]+ /, ""); args[pid] = $0 }
+	END {
+		count = split(panes, pane, " ")
+		for (i = 1; i <= count; i++) {
+			leader = foreground[pane[i]]
+			print (leader == pane[i] ? "" : args[leader])
+		}
+	}'
