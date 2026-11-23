@@ -125,10 +125,12 @@ pane_contents_dir() {
 	echo "$(resurrect_dir)/$1/pane_contents/"
 }
 
+# A pane id holds its session's name, which may contain `/`; it is encoded (`%` first,
+# so the encoding stays one-to-one) to stay one file in the directory, not a path.
 pane_contents_file() {
 	local save_or_restore="$1"
-	local pane_id="$2"
-	echo "$(pane_contents_dir "$save_or_restore")/pane-${pane_id}"
+	local pane_id="${2//%/%25}"
+	echo "$(pane_contents_dir "$save_or_restore")/pane-${pane_id//\//%2F}"
 }
 
 pane_contents_file_exists() {

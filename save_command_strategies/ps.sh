@@ -8,6 +8,9 @@ ps -axo "pid=,tpgid=,args=" | awk -v panes="$*" '
 	END {
 		count = split(panes, pane, " ")
 		for (i = 1; i <= count; i++) {
+			if (!(pane[i] in foreground)) {
+				print "ps strategy: pane " pane[i] " exited during the save; it is saved running nothing" > "/dev/stderr"
+			}
 			leader = foreground[pane[i]]
 			print (leader == pane[i] ? "" : args[leader])
 		}
