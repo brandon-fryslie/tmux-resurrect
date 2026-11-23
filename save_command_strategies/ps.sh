@@ -1,24 +1,17 @@
 #!/usr/bin/env bash
 
-CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+# Prints one line per pane pid given: the command line of the process in the pane's
+# foreground, or an empty line when that is the pane's own shell.
 
-PANE_PID="$1"
-
-exit_safely_if_empty_ppid() {
-	if [ -z "$PANE_PID" ]; then
-		exit 0
-	fi
-}
-
-full_command() {
-	ps -ao "ppid,args" |
-		sed "s/^ *//" |
-		grep "^${PANE_PID}" |
-		cut -d' ' -f2-
-}
-
-main() {
-	exit_safely_if_empty_ppid
-	full_command
-}
-main
+ps -axo "pid=,tpgid=,args=" | awk -v panes="$*" '
+	{ pid = $1; foreground[pid] = $2; sub(/^ *[0-9]+ +-?[0-9]+ /, ""); args[pid] = $0 }
+	END {
+		count = split(panes, pane, " ")
+		for (i = 1; i <= count; i++) {
+			if (!(pane[i] in foreground)) {
+				print "ps strategy: pane " pane[i] " exited during the save; it is saved running nothing" > "/dev/stderr"
+			}
+			leader = foreground[pane[i]]
+			print (leader == pane[i] ? "" : args[leader])
+		}
+	}'

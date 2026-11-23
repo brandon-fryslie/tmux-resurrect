@@ -1,22 +1,14 @@
 #!/usr/bin/env bash
 
-CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-
-PANE_PID="$1"
-
-exit_safely_if_empty_ppid() {
-	if [ -z "$PANE_PID" ]; then
-		exit 0
-	fi
-}
+# Prints one line per pane pid given: the command line of the process in the pane's
+# foreground, or an empty line when that is the pane's own shell.
 
 full_command() {
-	\pgrep -lf -P "$PANE_PID" |
-		cut -d' ' -f2-
+	local leader="$(ps -o tpgid= -p "$1" | tr -d ' ')"
+	[[ -z "$leader" || "$leader" == "$1" ]] && return
+	\pgrep -lf -g "$leader" | awk -v leader="$leader" '$1 == leader { sub(/^[0-9]+ /, ""); print; exit }'
 }
 
-main() {
-	exit_safely_if_empty_ppid
-	full_command
-}
-main
+for pane_pid in "$@"; do
+	echo "$(full_command "$pane_pid")"
+done
