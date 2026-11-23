@@ -96,6 +96,12 @@ toggle_window_zoom() {
 
 _save_command_strategy_file() {
 	local save_command_strategy="$(get_tmux_option "$save_command_strategy_option" "$default_save_command_strategy")"
+	# A path names an executable outside the plugin; it is used as given, with no
+	# fallback, so a wrong path fails where it is run instead of saving ps output.
+	if [[ "$save_command_strategy" == */* ]]; then
+		echo "${save_command_strategy/#\~/$HOME}"
+		return
+	fi
 	local strategy_file="$CURRENT_DIR/../save_command_strategies/${save_command_strategy}.sh"
 	local default_strategy_file="$CURRENT_DIR/../save_command_strategies/${default_save_command_strategy}.sh"
 	if [ -e "$strategy_file" ]; then # strategy file exists?

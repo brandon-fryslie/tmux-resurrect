@@ -203,3 +203,17 @@ Mosh spawns a `mosh-client` process, so we need to specify that as the process t
     set -g @resurrect-processes 'mosh-client'
 
 Additionally a mosh-client strategy is provided to handle extracting the original arguments and re-run Mosh.
+
+### How a pane's command is recorded
+
+On save, a strategy is run once per pane with the pane's pid as its only argument,
+and what it prints is the command recorded for that pane: one line, which restore
+types into the pane. The bundled strategies (`ps`, the default, `pgrep`, `gdb`,
+`linux_procfs`) are chosen by name:
+
+    set -g @resurrect-save-command-strategy 'pgrep'
+
+A value containing a `/` is the path of your own executable strategy instead
+(`~` is expanded). It is used as given, with no fallback to the default:
+
+    set -g @resurrect-save-command-strategy '~/.config/tmux/my-strategy'
